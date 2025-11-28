@@ -13,11 +13,13 @@ st.markdown("""
 """)
 st.divider()
 
-# --- [DATA] 전라남도 22개 시군 겨울철 기온 데이터 (추정치) ---
-# base: 겨울철 평균 기온의 기준점 (높을수록 따뜻함)
-# amp: 기온 변동 폭 (내륙일수록 큼)
+# --- [0] 세션 상태 초기화 (결과창 유지용) ---
+# 버튼을 한 번 누르면 'analyzed' 상태를 True로 기억하게 함
+if 'analyzed' not in st.session_state:
+    st.session_state['analyzed'] = False
+
+# --- [DATA] 전라남도 22개 시군 겨울철 기온 데이터 ---
 REGION_DATA = {
-    # 1. 서남부 해안권 (비교적 온화)
     "영암군 (무화과 주산지)": {"base": 2.0, "amp": 8.0},
     "해남군": {"base": 2.2, "amp": 7.8},
     "목포시": {"base": 2.5, "amp": 7.5},
@@ -27,15 +29,11 @@ REGION_DATA = {
     "무안군": {"base": 1.5, "amp": 8.2},
     "강진군": {"base": 2.0, "amp": 8.0},
     "장흥군": {"base": 1.8, "amp": 8.2},
-
-    # 2. 동부권 (따뜻함~보통)
     "여수시": {"base": 3.0, "amp": 7.0},
     "순천시": {"base": 1.5, "amp": 8.5},
     "광양시": {"base": 2.0, "amp": 8.0},
     "고흥군": {"base": 2.8, "amp": 7.2},
     "보성군": {"base": 1.0, "amp": 8.5},
-
-    # 3. 중부/북부 내륙권 (상대적으로 추움)
     "나주시": {"base": 0.5, "amp": 9.0},
     "담양군": {"base": -0.5, "amp": 9.5},
     "곡성군": {"base": -1.0, "amp": 10.0},
@@ -51,12 +49,10 @@ with st.sidebar:
     st.header("📝 데이터 입력")
     st.info("화살표(>)를 눌러 각 항목을 입력하세요.")
 
-    # [0] 지역 선택
     with st.expander("0. 지역 선택 (필수)", expanded=True):
         region_name = st.selectbox("전남 시·군 선택", list(REGION_DATA.keys()))
         st.caption(f"📍 **{region_name}**의 기후 데이터를 사용합니다.")
 
-    # [1] 온실 규격
     with st.expander("1. 온실 규격 입력", expanded=False):
         gh_type = st.radio("온실 형태", ["단동 (1동)", "연동 (여러 동 연결)"])
         span_count = st.number_input("연동 수", value=1 if gh_type=="단동 (1동)" else 3, step=1, min_value=1)
@@ -70,7 +66,6 @@ with st.sidebar:
         floor_area_py = floor_area_m2 / 3.3
         st.write(f"📐 바닥: **{floor_area_py:.1f}평**")
 
-    # [2] 생산 목표
     with st.expander("2. 생산 목표 설정", expanded=False):
         summer_total_yield = st.number_input("🌞 평소(여름) 총 생산량 (kg)", value=int(floor_area_py * 10), step=100)
         winter_total_yield = st.number_input("⛄ 겨울 작기 예상 총 생산량 (kg)", value=int(summer_total_yield * 0.4), step=100)
@@ -81,7 +76,6 @@ with st.sidebar:
         
         market_price = st.number_input("겨울철 예상 단가 (원/kg)", value=18000, step=1000)
 
-    # [3] 시설 투자
     with st.expander("3. 시설 투자 및 감가상각", expanded=False):
         cost_film = st.number_input("① 피복재 (3년)", value=200, step=50)
         cost_curtain = st.number_input("② 보온커튼 (5년)", value=1500, step=100)
@@ -91,7 +85,6 @@ with st.sidebar:
         total_invest = cost_film + cost_curtain + cost_heater + cost_facility
         st.caption(f"💰 총 투자비: {total_invest:,} 만원")
 
-    # [4] 에너지 설정
     with st.expander("4. 에너지 및 보온", expanded=False):
         energy_source = st.selectbox("사용 연료", ["면세유(경유)", "농사용 전기"])
         unit_fuel_cost = st.number_input("연료 단가 (원)", value=1100 if energy_source=="면세유(경유)" else 50)
@@ -102,7 +95,9 @@ with st.sidebar:
         u_val = u_values[insul_type]
 
     st.write("---")
-    run_btn = st.button("🚜 정밀 경영 분석 실행 (터치)", type="primary", use_container_width=True)
+    # 버튼을 누르면 즉시 session_state를 True로 바꿈
+    if st.button("🚜 정밀 경영 분석 실행 (터치)", type="primary", use_container_width=True):
+        st.session_state['analyzed'] = True
 
 # --- 3. 핵심 알고리즘 (Engine) ---
 
@@ -123,4 +118,21 @@ def calculate_depreciation():
     return (d1 + d2 + d3 + d4) * 10000 
 
 def run_simulation(surface_area, region_info):
-    dates = pd.date_range('2025-11-01', '2026-02-28')
+    dates = pd.date_range('2025-11-01', '2026-02-28') 
+    
+    total_rev = 0
+    total_cost = 0
+    
+    eff = 0.85 if energy_source == "면세유(경유)" else 0.98
+    calorific = 8500 if energy_source == "면세유(경유)" else 860
+    
+    daily_base_yield = winter_total_yield / 120
+    
+    base_t = region_info['base']
+    amp_t = region_info['amp']
+
+    for i, date in enumerate(dates):
+        simulated_temp = base_t - (amp_t * np.sin(np.pi * i / 120)) 
+        min_temp = simulated_temp + np.random.uniform(-2, 2)
+        
+        delta_t = max(target_temp - min_temp, 0)
