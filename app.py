@@ -2,127 +2,179 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-# --- 1. 페이지 기본 설정 ---
-st.set_page_config(page_title="무화과 소득 최적화 도우미", layout="wide")
+# --- 1. 페이지 설정 ---
+st.set_page_config(page_title="무화과 겨울재배 투자 분석기", layout="wide")
 
-st.title("🍇 무화과 겨울재배 경영 의사결정 지원 시스템")
-st.markdown("""
-**내 하우스 환경과 현재 에너지 가격을 입력하세요.** 빅데이터 분석을 통해 **최적의 수확 종료일**과 **예상 수익**을 알려드립니다.
-""")
+st.title("🏭 무화과 겨울재배 시설투자 타당성 분석 시스템")
+st.markdown("현재 시설로 겨울 농사를 지을 때와, **시설 투자를 했을 때의 수익성을 비교**하여 의사결정을 도와드립니다.")
 st.divider()
 
-# --- 2. 사이드바: 농가 입력창 (User Inputs) ---
-st.sidebar.header("📝 농가 환경 입력")
-
-# 2-1. 하우스 정보
-area_py = st.sidebar.number_input("재배 면적 (평)", value=300, step=50)
-insulation = st.sidebar.selectbox(
-    "보온 자재 상태", 
-    ["1등급 (다겹보온커튼 7겹 이상)", "2등급 (다겹보온커튼 5겹)", "3등급 (일반 비닐+부직포)"],
-    index=1
-)
-
-# 2-2. 난방 정보
-heat_type = st.sidebar.radio("난방기 종류", ["경유 온풍기", "전기 난방기"])
-target_temp = st.sidebar.slider("목표 유지 온도 (℃)", 10, 20, 15)
-
-# 2-3. 비용 정보
-st.sidebar.subheader("💰 현재 시세 입력")
-oil_price = st.sidebar.number_input("면세유 가격 (원/L)", value=1100, step=10)
-elec_price = st.sidebar.number_input("농사용 전기료 (원/kWh)", value=55, step=1)
-market_price = st.sidebar.number_input("무화과 예상 도매가 (원/kg)", value=18000, step=1000)
-
-# --- 3. 내부 연산 로직 (Calculation Engine) ---
-
-# 보온 등급에 따른 열관류율(U값) 매핑
-u_val_map = {
-    "1등급 (다겹보온커튼 7겹 이상)": 1.5,
-    "2등급 (다겹보온커튼 5겹)": 2.5,
-    "3등급 (일반 비닐+부직포)": 4.0
-}
-u_value = u_val_map[insulation]
-
-# 효율 설정
-eff_oil = 0.85
-eff_elec = 0.98
-
-# 데이터 생성 함수
-def run_simulation():
-    # 11월 1일 ~ 2월 28일 날짜 생성
-    dates = pd.date_range(start='2025-11-01', end='2026-02-28')
-    data = []
+# --- 2. 사이드바: 데이터 입력 ---
+with st.sidebar:
+    st.header("1. 농장 기본 정보")
+    area_py = st.number_input("재배 면적 (평)", value=500, step=50)
+    target_temp = st.slider("목표 유지 온도 (℃)", 10, 20, 15)
     
-    cumulative_profit = 0
+    st.header("2. 겨울철 시장 예측")
+    market_price = st.number_input("예상 도매가 (원/kg)", value=20000, step=1000, help="겨울철 높은 단가를 입력하세요")
+    yield_efficiency = st.slider("여름 대비 겨울 생산성 (%)", 10, 100, 40, help="겨울은 일조량 부족으로 수량이 적습니다.")
+
+    st.header("3. 시설 투자 시나리오")
+    st.info("현재 상태와 바꾸고 싶은 시설을 선택하세요.")
+    
+    # 시설 등급별 U값(열관류율) 정의 (낮을수록 좋음)
+    insulation_options = {
+        "비닐 1겹 (단열 매우 나쁨)": 5.5,
+        "비닐 2겹 (단열 보통)": 3.5,
+        "다겹보온커튼 5겹 (단열 좋음)": 2.0,
+        "다겹보온커튼 7겹+알루미늄 (단열 최상)": 1.2
+    }
+    
+    current_facility = st.selectbox("현재 내 하우스 상태", list(insulation_options.keys()), index=0)
+    future_facility = st.selectbox("투자 후 시설 상태 (목표)", list(insulation_options.keys()), index=2)
+    
+    investment_cost = st.number_input("예상 시설 투자비 (만원)", value=1500, step=100) * 10000 # 원 단위 변환
+
+    st.header("4. 에너지 비용")
+    energy_type = st.radio("사용 연료", ["면세유(경유)", "농사용 전기"])
+    fuel_price = st.number_input("연료 단가 (원)", value=1100 if energy_type=="면세유(경유)" else 50)
+
+
+# --- 3. 분석 로직 (Engine) ---
+
+def calculate_season(u_value):
+    """
+    겨울 작기(11월~2월, 120일) 시뮬레이션
+    """
     area_m2 = area_py * 3.3
+    dates = pd.date_range('2025-11-01', '2026-02-28')
+    
+    total_revenue = 0
+    total_fuel_cost = 0
+    
+    # 에너지 효율
+    eff = 0.85 if energy_type == "면세유(경유)" else 0.98
+    calorific = 8500 if energy_type == "면세유(경유)" else 860 # kcal 기준
     
     for i, date in enumerate(dates):
-        # 가상의 기온 데이터 (1월 중순 최저)
-        temp_min = 8 - (12 * np.sin(np.pi * i / 120)) + np.random.uniform(-1, 1)
+        # 1. 기온 시뮬레이션 (1월이 가장 춥게)
+        min_temp = 5 - (10 * np.sin(np.pi * i / 120)) + np.random.uniform(-2, 2)
         
-        # 난방부하 계산
-        delta_t = max(target_temp - temp_min, 0)
-        heat_load = area_m2 * u_value * delta_t * 14 # 야간 14시간
+        # 2. 난방부하 계산 (Q = A * U * dT * Time)
+        delta_t = max(target_temp - min_temp, 0)
+        heat_load = area_m2 * u_value * delta_t * 14 # 야간 14시간 가동 가정
         
-        # 비용 계산
-        cost = 0
-        if heat_type == "경유 온풍기":
-            liters = heat_load / (8500 * eff_oil)
-            cost = liters * oil_price
-        else:
-            kwh = heat_load / (860 * eff_elec)
-            cost = kwh * elec_price
+        # 3. 연료비 계산
+        fuel_needed = heat_load / (calorific * eff)
+        daily_cost = fuel_needed * fuel_price
+        total_fuel_cost += daily_cost
+        
+        # 4. 생산량 및 매출 계산
+        # 여름 평균(30kg/10a 가정) * 면적비율 * 겨울생산성효율
+        std_yield = 30 * (area_m2 / 1000) 
+        daily_yield = std_yield * (yield_efficiency / 100)
+        
+        # 12월~1월은 수량이 더 떨어진다고 가정 (일조량 최저)
+        if 11 <= date.month <= 1: 
+            daily_yield *= 0.8
             
-        # 수익 계산 (날짜가 갈수록 수확량 조금씩 감소 가정)
-        yield_kg = (30 * (area_m2/1000)) * (1 - i*0.003) 
-        if yield_kg < 0: yield_kg = 0
-        revenue = yield_kg * market_price
-        
-        # 순이익
-        daily_profit = revenue - cost
-        cumulative_profit += daily_profit
-        
-        data.append([date, int(cost), int(revenue), int(daily_profit), int(cumulative_profit)])
-        
-    return pd.DataFrame(data, columns=['날짜', '난방비', '매출액', '일일순익', '누적순익'])
+        total_revenue += daily_yield * market_price
 
-# --- 4. 결과 출력 화면 (Dashboard) ---
+    return int(total_revenue), int(total_fuel_cost)
 
-if st.sidebar.button("결과 분석하기 (Click)"):
-    df = run_simulation()
+
+# --- 4. 결과 시각화 (Dashboard) ---
+
+if st.button("💰 투자 분석 결과 보기"):
     
-    # 최적점 찾기 (누적순익이 최대인 날)
-    max_idx = df['누적순익'].idxmax()
-    best_date = df.loc[max_idx, '날짜']
-    max_profit = df.loc[max_idx, '누적순익']
+    # 1. 시뮬레이션 실행
+    cur_u = insulation_options[current_facility]
+    fut_u = insulation_options[future_facility]
     
-    # 4-1. 핵심 메시지 (Metric)
-    st.success(f"📢 분석 결과, 사장님 농장의 최적 수확 종료일은 **{best_date.strftime('%Y년 %m월 %d일')}** 입니다.")
+    rev_cur, cost_cur = calculate_season(cur_u)
+    rev_fut, cost_fut = calculate_season(fut_u)
+    
+    profit_cur = rev_cur - cost_cur
+    profit_fut = rev_fut - cost_fut
+    
+    fuel_saving = cost_cur - cost_fut # 절감된 난방비
+    increased_profit = profit_fut - profit_cur # 늘어난 이익
+    
+    # 2. 투자 회수 기간 계산
+    if increased_profit > 0:
+        payback_years = investment_cost / increased_profit
+    else:
+        payback_years = 999 # 회수 불가능
+
+    # --- 화면 구성 ---
+    
+    # 상단 요약 배너
+    st.subheader("📊 분석 요약")
     
     col1, col2, col3 = st.columns(3)
-    col1.metric("예상 최대 순수익", f"{max_profit:,.0f} 원")
-    col2.metric("이때까지 예상 매출", f"{df.loc[max_idx, '매출액']:,.0f} 원")
-    col3.metric("예상 난방비 총액", f"{df.loc[:max_idx, '난방비'].sum():,.0f} 원")
-
-    # 4-2. 상세 조언
-    st.info(f"""
-    💡 **경영 조언:**
-    * **{best_date.strftime('%m월 %d일')}** 이후에는 난방비가 수확 수익보다 커지는 '적자 구간'에 진입합니다.
-    * 현재 **{heat_type}**를 사용 중이시며, 목표온도 **{target_temp}℃** 유지 시 분석된 결과입니다.
-    """)
-
-    # 4-3. 그래프 시각화
-    st.subheader("📈 일별 수익 vs 난방비 변화 추이")
     
-    # 차트용 데이터 가공
-    chart_data = df.set_index('날짜')[['매출액', '난방비']]
-    st.line_chart(chart_data)
-    
-    st.subheader("💰 누적 순이익 곡선 (언제 꺾이는가?)")
-    st.line_chart(df.set_index('날짜')['누적순익'])
+    with col1:
+        st.metric(
+            label="현재 시설 순수익(1년)", 
+            value=f"{profit_cur/10000:,.0f} 만원",
+            delta="겨울재배 시"
+        )
+    with col2:
+        st.metric(
+            label="투자 후 순수익(1년)", 
+            value=f"{profit_fut/10000:,.0f} 만원",
+            delta=f"+{(profit_fut-profit_cur)/10000:,.0f} 만원 증가"
+        )
+    with col3:
+        if payback_years < 10:
+            st.metric(
+                label="투자비 회수 기간", 
+                value=f"{payback_years:.1f} 년",
+                delta="이후 순수익 전환"
+            )
+        else:
+            st.error("투자 회수 불가능 (수익 증가분이 적음)")
 
-    # 4-4. 데이터 표
-    with st.expander("📊 상세 데이터 표 보기"):
-        st.dataframe(df)
+    st.divider()
+
+    # 상세 분석
+    c1, c2 = st.columns(2)
+    
+    with c1:
+        st.subheader("🔥 난방비 절감 효과")
+        st.write(f"시설 투자 시, 연간 난방비가 **{cost_cur/10000:,.0f}만원**에서 **{cost_fut/10000:,.0f}만원**으로 줄어듭니다.")
+        
+        # 바 차트
+        df_cost = pd.DataFrame({
+            '구분': ['현재 시설', '투자 후 시설'],
+            '난방비': [cost_cur, cost_fut]
+        })
+        st.bar_chart(df_cost.set_index('구분'))
+
+    with c2:
+        st.subheader("⚖️ 투자 타당성 판정")
+        if profit_cur < 0:
+            st.warning("⚠️ **현재 시설로는 겨울 재배 시 적자**가 발생합니다. 투자가 필수적입니다.")
+        
+        if payback_years <= 2:
+            st.success(f"✅ **적극 추천:** 투자비를 **{payback_years:.1f}년** 만에 뽑을 수 있는 아주 좋은 투자입니다.")
+        elif payback_years <= 5:
+            st.info(f"☑️ **보통:** 투자 회수에 **{payback_years:.1f}년**이 걸립니다. 장기적으로 보고 결정하세요.")
+        else:
+            st.error("❌ **비추천:** 투자비 회수에 너무 오랜 시간이 걸립니다. 난방 효율을 더 높이거나 투자비를 줄이세요.")
+
+    # 5년치 현금흐름표
+    st.subheader("📅 향후 5년간 예상 현금 흐름 (ROI)")
+    years = [1, 2, 3, 4, 5]
+    cash_flow = [-investment_cost + (profit_fut * y) for y in years] # 누적 순이익 - 투자비
+    
+    df_roi = pd.DataFrame({
+        '년차': [f"{y}년차" for y in years],
+        '누적 손익': cash_flow
+    })
+    
+    st.line_chart(df_roi.set_index('년차'))
+    st.caption("* 그래프가 0 위로 올라가는 시점이 손익분기점입니다.")
 
 else:
-    st.info("👈 왼쪽 사이드바에서 농가 정보를 입력하고 '결과 분석하기' 버튼을 눌러주세요.")
+    st.info("👈 왼쪽에서 농가 정보와 투자 계획을 입력하고 버튼을 눌러주세요.")
