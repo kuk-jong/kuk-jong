@@ -3,6 +3,50 @@ import pandas as pd
 import numpy as np
 import math
 
+import streamlit as st
+import pandas as pd
+import numpy as np
+import math
+
+# --- 1. 페이지 설정 (이게 항상 맨 위에 있어야 함) ---
+st.set_page_config(page_title="전남 무화과 경영 분석기", layout="wide")
+
+# ==========================================
+# 🔐 [보안 기능] 비밀번호 잠금 장치
+# ==========================================
+
+# 1. 비밀번호 설정 (여기를 원하시는 암호로 바꾸세요)
+SECRET_PASSWORD = "1234" 
+
+# 2. 로그인 상태 확인
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+# 3. 로그인 화면 구현
+if not st.session_state["authenticated"]:
+    st.title("🔒 접근 제한 구역")
+    st.markdown("### 관계자 외 출입 금지")
+    st.write("이 시스템은 허가된 사용자만 이용할 수 있습니다.")
+    
+    password_input = st.text_input("비밀번호를 입력하세요", type="password")
+    
+    if st.button("로그인"):
+        if password_input == SECRET_PASSWORD:
+            st.session_state["authenticated"] = True
+            st.rerun()  # 화면을 새로고침해서 내용을 보여줌
+        else:
+            st.error("비밀번호가 틀렸습니다.")
+    
+    st.stop() # 🛑 여기서 코드를 멈춰서, 밑에 있는 계산기가 안 보이게 함
+
+# ==========================================
+# 👇 여기부터 원래 계산기 코드 시작
+# ==========================================
+
+st.title("🗺️ [전남] 무화과 연간 경영 분석 시스템")
+# ... (원래 있던 코드들 계속) ...
+
+
 # --- 1. 페이지 설정 ---
 st.set_page_config(page_title="전남 무화과 경영 분석기", layout="wide")
 
@@ -241,4 +285,5 @@ with st.sidebar:
     # QR코드 생성 API를 활용해 이미지를 바로 띄움
     qr_url = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://kuk-jong-8maxlevt4gj3ftrzdjtzqj.streamlit.app/"
     st.image(qr_url, caption="카메라로 스캔하세요")
+
 
