@@ -6,7 +6,7 @@ import math
 # --- 1. 페이지 설정 ---
 st.set_page_config(page_title="전남 무화과 경영 분석기", layout="wide")
 
-st.title("🗺️ [전남] 무화과 연간 경영 분석 시스템")
+st.title("🗺️ [전남] 무화과 겨울재배 경영 분석 시스템")
 st.markdown("겨울철 투자 분석뿐만 아니라, **여름 작기를 포함한 연간 총 소득**까지 예측해 드립니다.")
 st.divider()
 
@@ -48,7 +48,7 @@ with st.sidebar:
         
         # [1] 온실 규격
         with st.expander("1. 온실 규격", expanded=False):
-            gh_type = st.radio("온실 형태", ["단동 (1동)", "연동 (여러 동 연결)"])
+            gh_type = st.radio("온실 형태", ["단동 (1동)", "연동"])
             span_count = st.number_input("연동 수", value=1 if gh_type=="단동 (1동)" else 3, step=1)
             gh_width = st.number_input("폭 (m)", value=6.0, step=0.5)
             gh_length = st.number_input("길이 (m)", value=50.0, step=1.0)
@@ -74,7 +74,7 @@ with st.sidebar:
 
         # [3] 시설 투자
         with st.expander("3. 시설 투자비", expanded=False):
-            cost_film = st.number_input("피복재 (3년)", value=200, step=50)
+            cost_film = st.number_input("피복비닐닐 (3년)", value=200, step=50)
             cost_curtain = st.number_input("보온커튼 (5년)", value=1500, step=100)
             cost_heater = st.number_input("난방기 (10년)", value=500, step=100)
             cost_facility = st.number_input("기타 설비 (10년)", value=300, step=100)
@@ -241,3 +241,4 @@ with st.sidebar:
     # QR코드 생성 API를 활용해 이미지를 바로 띄움
     qr_url = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://kuk-jong-8maxlevt4gj3ftrzdjtzqj.streamlit.app/"
     st.image(qr_url, caption="카메라로 스캔하세요")
+
