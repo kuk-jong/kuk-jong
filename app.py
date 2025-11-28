@@ -43,9 +43,6 @@ if not st.session_state["authenticated"]:
 # 👇 여기부터 원래 계산기 코드 시작
 # ==========================================
 
-st.title("🗺️ [전남] 무화과 연간 경영 분석 시스템")
-# ... (원래 있던 코드들 계속) ...
-
 
 # --- 1. 페이지 설정 ---
 st.set_page_config(page_title="전남 무화과 경영 분석기", layout="wide")
@@ -285,5 +282,6 @@ with st.sidebar:
     # QR코드 생성 API를 활용해 이미지를 바로 띄움
     qr_url = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://kuk-jong-8maxlevt4gj3ftrzdjtzqj.streamlit.app/"
     st.image(qr_url, caption="카메라로 스캔하세요")
+
 
 
