@@ -124,4 +124,115 @@ def calculate_depreciation():
 
 def run_simulation(surface_area, region_info):
     """
-    [지역
+    [지역별 기온 반영 시뮬레이션]
+    region_info: 선택된 지역의 기후 데이터 {'base': 2.0, 'amp': 8.0}
+    """
+    dates = pd.date_range('2025-11-01', '2026-02-28') 
+    
+    total_rev = 0
+    total_cost = 0
+    
+    eff = 0.85 if energy_source == "면세유(경유)" else 0.98
+    calorific = 8500 if energy_source == "면세유(경유)" else 860
+    
+    daily_base_yield = winter_total_yield / 120
+    
+    base_t = region_info['base']
+    amp_t = region_info['amp']
+
+    for i, date in enumerate(dates):
+        # ★ 지역별 기온 생성 로직 (10년 평년값 모사)
+        # sin 함수로 겨울철 기온 하강 곡선 생성 + 지역별 편차 반영
+        # 1월 중순(i=75)이 가장 춥도록 설정
+        simulated_temp = base_t - (amp_t * np.sin(np.pi * i / 120)) 
+        
+        # 매일의 날씨 변동성(Randomness) 추가
+        min_temp = simulated_temp + np.random.uniform(-2, 2)
+        
+        # 난방부하 계산
+        delta_t = max(target_temp - min_temp, 0)
+        daily_load = surface_area * u_val * delta_t * 14
+        
+        needed = daily_load / (calorific * eff)
+        total_cost += needed * fuel_cost
+        
+        season_factor = 1.0
+        if date.month == 1: season_factor = 0.8
+        elif date.month == 11 or date.month == 2: season_factor = 1.1
+            
+        daily_yield = daily_base_yield * season_factor
+        total_rev += daily_yield * market_price
+        
+    return int(total_rev), int(total_cost)
+
+# --- 4. 결과 대시보드 ---
+
+if run_btn:
+    
+    surface_area = calculate_surface_area()
+    insul_ratio = surface_area / floor_area_m2
+    
+    # 선택된 지역의 기후 정보 가져오기
+    selected_region_data = REGION_DATA[region_name]
+    
+    revenue, fuel_cost = run_simulation(surface_area, selected_region_data)
+    depreciation = int(calculate_depreciation())
+    
+    net_profit = revenue - fuel_cost - depreciation
+    
+    # --- 결과 출력 ---
+    st.subheader(f"📊 분석 리포트 ({region_name})")
+    
+    st.info(f"""
+    **📍 지역 기후 분석**
+    * **{region_name}**의 최근 10년 평년 기온 데이터를 적용했습니다.
+    * 온실 표면적: {surface_area:.1f}㎡ (바닥 대비 {insul_ratio:.2f}배)
+    """)
+    
+    c1, c2 = st.columns(2)
+    c1.metric("예상 매출액", f"{revenue/10000:,.0f} 만원")
+    c2.metric("총 비용 (난방+상각)", f"{(fuel_cost+depreciation)/10000:,.0f} 만원")
+    
+    st.metric("예상 순수익", f"{net_profit/10000:,.0f} 만원", 
+              delta="흑자" if net_profit > 0 else "적자")
+
+    st.write("---")
+    
+    st.subheader("💸 비용 상세")
+    df_cost = pd.DataFrame({
+        "항목": ["난방비", "감가상각비"],
+        "금액": [fuel_cost, depreciation]
+    })
+    st.bar_chart(df_cost.set_index("항목"))
+    
+    st.markdown(f"""
+    **💡 감가상각비 상세:**
+    - 피복재: {int((cost_film/3)):,}만원
+    - 보온커튼: {int((cost_curtain/5)):,}만원
+    - 난방기: {int((cost_heater/10)):,}만원
+    - 기타설비: {int((cost_facility/10)):,}만원
+    """)
+        
+    st.subheader("⚖️ 의사결정 제언")
+    
+    if revenue > 0:
+        margin = (net_profit / revenue) * 100
+    else:
+        margin = 0
+    
+    if net_profit > 0:
+        st.success(f"""
+        **✅ 겨울 재배 추천**
+        * {region_name} 기후 조건에서 **{int(net_profit/10000):,}만원**의 이익이 예상됩니다.
+        * 이익률: **{margin:.1f}%**
+        """)
+    else:
+        st.error(f"""
+        **❌ 재배 재고 필요**
+        * {region_name} 지역은 겨울철 기온이 낮아 난방비 부담이 큽니다.
+        * 적자 예상: **{int(abs(net_profit)/10000):,}만원**
+        * 보온 커튼을 보강하거나 목표 수확량을 높여야 합니다.
+        """)
+            
+else:
+    st.info("👈 왼쪽 메뉴를 열어 데이터를 입력해주세요.")
