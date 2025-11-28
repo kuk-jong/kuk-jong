@@ -6,8 +6,8 @@ import math
 # --- 1. 페이지 설정 ---
 st.set_page_config(page_title="전남 무화과 경영 분석기", layout="wide")
 
-st.title("🗺️ [전남] 무화과 겨울재배 경영 분석 시스템")
-st.markdown("왼쪽 화살표(>)를 눌러 데이터를 입력하고 **[분석 실행]** 버튼을 누르세요.")
+st.title("🗺️ [전남] 무화과 연간 경영 분석 시스템")
+st.markdown("겨울철 투자 분석뿐만 아니라, **여름 작기를 포함한 연간 총 소득**까지 예측해 드립니다.")
 st.divider()
 
 # --- [DATA] 지역 데이터 ---
@@ -37,11 +37,10 @@ REGION_DATA = {
 }
 
 # --- 2. 사이드바: 폼(Form) 기반 입력 ---
-# ★핵심 변경★: st.form을 사용하여 입력 중 새로고침 방지
 with st.sidebar:
     with st.form(key='input_form'):
         st.header("📝 데이터 입력")
-        st.info("아래 내용을 모두 입력 후 맨 밑의 버튼을 누르세요.")
+        st.info("데이터 입력 후 맨 아래 버튼을 누르세요.")
 
         # [0] 지역 선택
         with st.expander("0. 지역 선택", expanded=True):
@@ -56,13 +55,20 @@ with st.sidebar:
             gh_side_h = st.number_input("측고 (m)", value=2.0, step=0.2)
             gh_ridge_h = st.number_input("동고 (m)", value=3.5, step=0.2)
             
-            # 면적 계산 (폼 내부에서는 실시간 출력이 안되므로 나중에 계산)
             floor_area_m2 = gh_width * gh_length * span_count
             floor_area_py = floor_area_m2 / 3.3
 
-        # [2] 생산 목표
-        with st.expander("2. 생산 목표", expanded=False):
+        # [2] 생산 목표 (여름/겨울 분리)
+        with st.expander("2. 연간 생산 계획", expanded=False):
+            st.markdown("**🌞 여름 작기 (기본)**")
             summer_total_yield = st.number_input("여름 총 생산량 (kg)", value=3000, step=100)
+            # [추가] 여름 단가
+            summer_price = st.number_input("여름 평균 단가 (원/kg)", value=6000, step=500)
+            # [추가] 여름 경영비율 (간단 계산용)
+            summer_cost_ratio = st.slider("여름철 경영비 비율 (%)", 10, 50, 30, help="매출액 중 비료, 인건비 등이 차지하는 비율")
+            
+            st.markdown("---")
+            st.markdown("**⛄ 겨울 작기 (추가)**")
             winter_total_yield = st.number_input("겨울 예상 생산량 (kg)", value=1200, step=100)
             market_price = st.number_input("겨울 예상 단가 (원/kg)", value=18000, step=1000)
 
@@ -81,21 +87,18 @@ with st.sidebar:
             insul_type = st.selectbox("보온 등급", ["비닐 1겹 (U=5.5)", "비닐 2겹 (U=4.5)", "다겹보온커튼 (U=2.0)", "고효율 패키지 (U=1.5)"])
 
         st.write("---")
-        # ★★★ 여기가 제일 중요합니다 ★★★
-        # form_submit_button을 써야 입력이 완료된 후 한 번에 실행됩니다.
-        submit_btn = st.form_submit_button(label='🚜 분석 실행 (Click)', type="primary", use_container_width=True)
+        submit_btn = st.form_submit_button(label='🚜 연간 분석 실행 (Click)', type="primary", use_container_width=True)
 
 
 # --- 3. 알고리즘 및 결과 처리 ---
 
-# 버튼이 눌렸을 때만 아래 코드가 실행됨
 if submit_btn:
     
-    # --- 변수 정리 ---
+    # --- A. 겨울철 정밀 분석 (기존 로직) ---
     u_values = {"비닐 1겹 (U=5.5)": 5.5, "비닐 2겹 (U=4.5)": 4.5, "다겹보온커튼 (U=2.0)": 2.0, "고효율 패키지 (U=1.5)": 1.5}
     u_val = u_values[insul_type]
     
-    # 1. 표면적 계산
+    # 표면적
     roof_height = gh_ridge_h - gh_side_h
     roof_slope_len = math.sqrt((gh_width/2)**2 + roof_height**2)
     area_roof = 2 * roof_slope_len * gh_length * span_count 
@@ -104,17 +107,17 @@ if submit_btn:
     area_end = one_end_wall * 2 * span_count 
     surface_area = area_roof + area_side + area_end
     
-    # 2. 감가상각비 계산
+    # 감가상각비
     d1 = cost_film / 3       
     d2 = cost_curtain / 5    
     d3 = cost_heater / 10    
     d4 = cost_facility / 10  
     depreciation = (d1 + d2 + d3 + d4) * 10000 
     
-    # 3. 시뮬레이션
+    # 겨울 시뮬레이션
     dates = pd.date_range('2025-11-01', '2026-02-28') 
-    total_rev = 0
-    total_cost = 0
+    winter_revenue = 0
+    winter_fuel_cost = 0
     
     eff = 0.85 if energy_source == "면세유(경유)" else 0.98
     calorific = 8500 if energy_source == "면세유(경유)" else 860
@@ -130,49 +133,79 @@ if submit_btn:
         
         delta_t = max(target_temp - min_temp, 0)
         daily_load = surface_area * u_val * delta_t * 14
-        
         needed = daily_load / (calorific * eff)
-        total_cost += needed * unit_fuel_cost
+        winter_fuel_cost += needed * unit_fuel_cost
         
         season_factor = 1.0
         if date.month == 1: season_factor = 0.8
         elif date.month == 11 or date.month == 2: season_factor = 1.1
-            
         daily_yield = daily_base_yield * season_factor
-        total_rev += daily_yield * market_price
+        winter_revenue += daily_yield * market_price
 
-    # 4. 결과 출력
-    result_fuel_cost = int(total_cost)
-    revenue = int(total_rev)
+    # 정수 변환
+    winter_revenue = int(winter_revenue)
+    winter_fuel_cost = int(winter_fuel_cost)
     depreciation = int(depreciation)
-    net_profit = revenue - result_fuel_cost - depreciation
     
-    # --- 화면 표시 ---
-    st.header(f"📊 분석 리포트 ({region_name})")
+    # 겨울 순수익 (겨울매출 - 난방비 - 연간감가상각)
+    winter_net_profit = winter_revenue - winter_fuel_cost - depreciation
+
+    # --- B. 여름철 및 연간 분석 (신규 로직) ---
+    summer_revenue = summer_total_yield * summer_price
+    summer_cost = summer_revenue * (summer_cost_ratio / 100) # 경영비율 적용
+    summer_net_profit = summer_revenue - summer_cost
     
-    c1, c2 = st.columns(2)
-    c1.metric("예상 매출액", f"{revenue/10000:,.0f} 만원")
-    c2.metric("총 비용", f"{(result_fuel_cost+depreciation)/10000:,.0f} 만원")
+    # 연간 총합
+    total_annual_revenue = summer_revenue + winter_revenue
+    total_annual_profit = summer_net_profit + winter_net_profit
     
-    st.metric("예상 순수익", f"{net_profit/10000:,.0f} 만원", 
-              delta="흑자" if net_profit > 0 else "적자")
+    # --- C. 결과 출력 ---
+    st.header(f"📊 연간 경영 분석 리포트 ({region_name})")
     
+    # 1. 겨울 투자 분석 (핵심)
+    st.subheader("❄️ 1. 겨울 재배 투자 성적표")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("겨울 매출", f"{winter_revenue/10000:,.0f} 만원")
+    col2.metric("겨울 비용(난방+상각)", f"{(winter_fuel_cost+depreciation)/10000:,.0f} 만원")
+    col3.metric("겨울 순이익", f"{winter_net_profit/10000:,.0f} 만원", 
+                delta="투자 성공" if winter_net_profit > 0 else "투자 주의")
+    
+    # 2. 연간 총괄 (종합)
+    st.subheader("📅 2. 연간 총 소득 (여름 + 겨울)")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("연간 총 매출", f"{total_annual_revenue/10000:,.0f} 만원", help="여름 매출 + 겨울 매출")
+    c2.metric("연간 총 순이익", f"{total_annual_profit/10000:,.0f} 만원", 
+              delta=f"여름 대비 +{winter_net_profit/10000:,.0f}만원")
+    
+    # 소득 구성비 차트
     st.write("---")
-    st.subheader("💸 비용 상세")
+    st.subheader("💰 소득 구조 시각화")
     
-    df_cost = pd.DataFrame({
-        "항목": ["난방비", "감가상각비"],
-        "금액": [result_fuel_cost, depreciation]
-    })
-    st.bar_chart(df_cost.set_index("항목"))
+    chart_col1, chart_col2 = st.columns(2)
     
-    st.info(f"""
-    **ℹ️ 온실 정보**
-    * 바닥 면적: {floor_area_py:.1f}평
-    * 난방 부하 표면적: {surface_area:.1f}㎡
-    * 여름 대비 생산성: {(winter_total_yield/summer_total_yield*100):.1f}%
+    with chart_col1:
+        st.caption("계절별 매출 비중")
+        df_rev = pd.DataFrame({
+            "계절": ["여름 작기", "겨울 작기"],
+            "매출액": [summer_revenue, winter_revenue]
+        })
+        st.bar_chart(df_rev.set_index("계절"))
+        
+    with chart_col2:
+        st.caption("비용 구조 분석")
+        df_cost = pd.DataFrame({
+            "항목": ["여름 경영비", "겨울 난방비", "시설 감가상각비"],
+            "금액": [summer_cost, winter_fuel_cost, depreciation]
+        })
+        st.bar_chart(df_cost.set_index("항목"))
+
+    # 최종 제언
+    st.success(f"""
+    **📢 최종 진단:**
+    * 겨울 재배를 추가할 경우, 기존 여름 소득({int(summer_net_profit/10000):,}만원)에 더해
+    **{int(winter_net_profit/10000):,}만원의 추가 이익**이 발생합니다.
+    * 따라서 연간 총 소득은 **{int(total_annual_profit/10000):,}만원**으로 예상됩니다.
     """)
 
 else:
-    # 아직 버튼 안 눌렀을 때
-    st.info("👈 왼쪽 사이드바에서 데이터를 입력하고 **[분석 실행]** 버튼을 눌러주세요.")
+    st.info("👈 왼쪽 메뉴에서 데이터를 입력하고 '분석 실행' 버튼을 눌러주세요.")
