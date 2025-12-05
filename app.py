@@ -114,8 +114,8 @@ with st.sidebar:
             market_price = st.number_input("겨울 예상 단가 (원/kg)", value=18000, step=1000)
 
         # [3] 시설 투자
-        with st.expander("3. 시설 투자비", expanded=False):
-            cost_film = st.number_input("피복비닐닐 (3년)", value=200, step=50)
+        with st.expander("3. 시설투자비(겨율)", expanded=False):
+            cost_film = st.number_input("피복비닐 (3년)", value=200, step=50)
             cost_curtain = st.number_input("보온커튼 (5년)", value=1500, step=100)
             cost_heater = st.number_input("난방기 (10년)", value=500, step=100)
             cost_facility = st.number_input("기타 설비 (10년)", value=300, step=100)
@@ -282,6 +282,7 @@ with st.sidebar:
     # QR코드 생성 API를 활용해 이미지를 바로 띄움
     qr_url = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://kuk-jong-8maxlevt4gj3ftrzdjtzqj.streamlit.app/"
     st.image(qr_url, caption="카메라로 스캔하세요")
+
 
 
 
