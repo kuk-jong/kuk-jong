@@ -25,7 +25,7 @@ if "authenticated" not in st.session_state:
 # 3. 로그인 화면 구현
 if not st.session_state["authenticated"]:
     st.title("🔒 접근 제한 구역")
-    st.markdown("### 관계자 외 출입 금지")
+    st.markdown("### 과수연구소 관계자 외 접근금지")
     st.write("이 시스템은 허가된 사용자만 이용할 수 있습니다.")
     
     password_input = st.text_input("비밀번호를 입력하세요", type="password")
@@ -47,8 +47,8 @@ if not st.session_state["authenticated"]:
 # --- 1. 페이지 설정 ---
 st.set_page_config(page_title="전남 무화과 경영 분석기", layout="wide")
 
-st.title("🗺️ [전남] 무화과 겨울재배 경영 분석 시스템")
-st.markdown("겨울철 투자 분석뿐만 아니라, **여름 작기를 포함한 연간 총 소득**까지 예측해 드립니다.")
+st.title("🗺️ [전남] 무화과 겨울재배 의사결정지원시스템")
+st.markdown("겨울철 투자 분석뿐만 아니라, 여름 작기를 포함한 연간 총 소득까지 예측해 드립니다.")
 st.divider()
 
 # --- [DATA] 지역 데이터 ---
@@ -282,6 +282,7 @@ with st.sidebar:
     # QR코드 생성 API를 활용해 이미지를 바로 띄움
     qr_url = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://kuk-jong-8maxlevt4gj3ftrzdjtzqj.streamlit.app/"
     st.image(qr_url, caption="카메라로 스캔하세요")
+
 
 
 
